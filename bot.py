@@ -132,8 +132,17 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
     # регистрируем команды для подсказки
+    # Устанавливаем команды интерфейса (await required)
+import asyncio
+asyncio.get_event_loop().run_until_complete(
     app.bot.set_my_commands([
         BotCommand("start", "Показать справку"),
+        BotCommand("transcribe", "Транскрибировать голосовое сообщение"),
+        BotCommand("remind", "Установить напоминание"),
+        BotCommand("listreminders", "Список напоминаний"),
+        BotCommand("cancel", "Отменить напоминание по ID"),
+    ])
+),
         BotCommand("transcribe", "Транскрибировать голосовое сообщение"),
         BotCommand("remind", "Установить напоминание"),
         BotCommand("listreminders", "Список напоминаний"),

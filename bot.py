@@ -1,6 +1,7 @@
 import os
 import re
 import tempfile
+import asyncio
 from datetime import datetime, timedelta
 
 import whisper
@@ -9,8 +10,6 @@ from telegram import Update, BotCommand
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
-    MessageHandler,
-    filters,
     ContextTypes,
 )
 
@@ -40,7 +39,7 @@ def parse_time_spec(t: str):
     except ValueError:
         return None
 
-# Обработчик транскрипции команды
+# Хендлер транскрипции команды
 async def cmd_transcribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
     reply = msg.reply_to_message
@@ -79,14 +78,12 @@ async def remind_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text(
             "Неверный формат времени. Используйте 10m, 2h или HH:MM"
         )
-    # определяем задержку
     if isinstance(when, timedelta):
         delay = when.total_seconds()
     else:
         delay = (when - datetime.now()).total_seconds()
-    # создаём задание
     job = context.job_queue.run_once(
-        callback=alarm,
+        alarm,
         when=delay,
         chat_id=update.effective_chat.id,
         name=f"reminder_{update.effective_user.id}_{datetime.now().timestamp()}",
@@ -102,8 +99,7 @@ async def list_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     now = datetime.now()
     lines = []
     for job in jobs:
-        nr = job.next_run_time
-        delta = nr - now
+        delta = job.next_run_time - now
         mins = int(delta.total_seconds() // 60)
         lines.append(f"{job.job_id}: через {mins} мин → {job.data['text']}")
     await update.message.reply_text("\n".join(lines))
@@ -121,7 +117,7 @@ async def cancel_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Привет! Я бот для транскрипции и напоминаний.\n"
+        "Привет! Я бот для транскрипции и напоминаний.\n\n"
         "- /transcribe (reply на voice-note)\n"
         "- /remind <time> <text>\n"
         "- /listreminders\n"
@@ -131,31 +127,28 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
-    # регистрируем команды для подсказки
-    # Устанавливаем команды интерфейса (await required)
-import asyncio
-asyncio.get_event_loop().run_until_complete(
-    app.bot.set_my_commands([
-        BotCommand("start", "Показать справку"),
-        BotCommand("transcribe", "Транскрибировать голосовое сообщение"),
-        BotCommand("remind", "Установить напоминание"),
-        BotCommand("listreminders", "Список напоминаний"),
-        BotCommand("cancel", "Отменить напоминание по ID"),
-    ])
-),
-        BotCommand("transcribe", "Транскрибировать голосовое сообщение"),
-        BotCommand("remind", "Установить напоминание"),
-        BotCommand("listreminders", "Список напоминаний"),
-        BotCommand("cancel", "Отменить напоминание по ID"),
-    ])
-    # хендлеры
+
+    # Устанавливаем команды интерфейса
+    asyncio.get_event_loop().run_until_complete(
+        app.bot.set_my_commands([
+            BotCommand("start", "Показать справку"),
+            BotCommand("transcribe", "Транскрибировать голосовое сообщение"),
+            BotCommand("remind", "Установить напоминание"),
+            BotCommand("listreminders", "Список напоминаний"),
+            BotCommand("cancel", "Отменить напоминание по ID"),
+        ])
+    )
+
+    # Регистрируем хендлеры
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("transcribe", cmd_transcribe))
     app.add_handler(CommandHandler("remind", remind_cmd))
     app.add_handler(CommandHandler("listreminders", list_cmd))
     app.add_handler(CommandHandler("cancel", cancel_cmd))
-    # для inline транскрипции reply командой
+
+    print("Бот с транскрипцией и напоминаниями запущен…")
     app.run_polling()
+
 
 if __name__ == "__main__":
     main()

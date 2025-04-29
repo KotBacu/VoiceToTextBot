@@ -24,6 +24,7 @@ if not TOKEN:
 
 # Парсер временных спецификаций
 def parse_time_spec(t: str):
+    # относительное время: 10m, 2h
     m = re.match(r"^(\d+)([mh])$", t)
     if m:
         v, unit = int(m.group(1)), m.group(2)
@@ -36,10 +37,10 @@ def parse_time_spec(t: str):
         if target <= now:
             target += timedelta(days=1)
         return target
-    except ValueError:
+    except Exception:
         return None
 
-# Хендлер транскрипции команды
+# Обработчик транскрипции команды
 async def cmd_transcribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
     reply = msg.reply_to_message
@@ -57,7 +58,7 @@ async def cmd_transcribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = res.get("text", "").strip() or "❌ Не удалось распознать речь."
     await msg.reply_text(f"📝 Транскрипция:\n{text}")
 
-# Напоминания через JobQueue
+# Колбек для напоминаний
 async def alarm(context: ContextTypes.DEFAULT_TYPE):
     job = context.job
     await context.bot.send_message(
@@ -65,23 +66,26 @@ async def alarm(context: ContextTypes.DEFAULT_TYPE):
         text=f"⏰ Напоминание:\n{job.data['text']}"
     )
 
+# Установка напоминания
 async def remind_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(context.args) < 2:
         return await update.message.reply_text(
             "Используйте: /remind <время> <текст>\n"
             "Время: 10m, 2h или HH:MM"
         )
-    spec = context.args[0]
-    text = " ".join(context.args[1:])
+    spec, *rest = context.args
+    text = " ".join(rest)
     when = parse_time_spec(spec)
     if when is None:
         return await update.message.reply_text(
             "Неверный формат времени. Используйте 10m, 2h или HH:MM"
         )
+    # вычисляем задержку
     if isinstance(when, timedelta):
         delay = when.total_seconds()
     else:
         delay = (when - datetime.now()).total_seconds()
+    # планируем задачу
     job = context.job_queue.run_once(
         alarm,
         when=delay,
@@ -90,8 +94,11 @@ async def remind_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         data={"text": text}
     )
     run_at = (datetime.now() + timedelta(seconds=delay)).strftime("%Y-%m-%d %H:%M")
-    await update.message.reply_text(f"✅ Напоминание установлено на {run_at}\nID: {job.job_id}")
+    await update.message.reply_text(
+        f"✅ Напоминание установлено на {run_at}\nID: {job.name}"
+    )
 
+# Список напоминаний
 async def list_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     jobs = context.job_queue.get_jobs()
     if not jobs:
@@ -101,9 +108,10 @@ async def list_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for job in jobs:
         delta = job.next_run_time - now
         mins = int(delta.total_seconds() // 60)
-        lines.append(f"{job.job_id}: через {mins} мин → {job.data['text']}")
+        lines.append(f"{job.name}: через {mins} мин → {job.data['text']}")
     await update.message.reply_text("\n".join(lines))
 
+# Отмена напоминания
 async def cancel_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         return await update.message.reply_text("Используйте /cancel <ID напоминания>")
@@ -112,9 +120,9 @@ async def cancel_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if job:
         job.schedule_removal()
         return await update.message.reply_text(f"❌ Напоминание {job_id} отменено.")
-    else:
-        return await update.message.reply_text(f"Напоминание с ID {job_id} не найдено.")
+    return await update.message.reply_text(f"Напоминание с ID {job_id} не найдено.")
 
+# Команда /start
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Привет! Я бот для транскрипции и напоминаний.\n\n"
@@ -124,11 +132,12 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "- /cancel <ID>"
     )
 
+# Основная функция
 
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
 
-    # Устанавливаем команды интерфейса
+    # Регистрируем команды интерфейса
     asyncio.get_event_loop().run_until_complete(
         app.bot.set_my_commands([
             BotCommand("start", "Показать справку"),

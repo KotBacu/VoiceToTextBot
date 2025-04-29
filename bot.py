@@ -14,7 +14,7 @@ from telegram.ext import (
 # Загружаем модель Whisper
 model = whisper.load_model("small")
 
-TOKEN = os.getenv("TELEGRAM_TOKEN", "8034075734:AAE6CQG-iMD86PbzWr2Qe1d3Vvr3dYYKTts")
+TOKEN = os.getenv("TELEGRAM_TOKEN")
 
 async def transcribe_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     voice = update.message.voice or update.message.audio

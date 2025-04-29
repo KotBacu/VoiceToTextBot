@@ -12,7 +12,7 @@ from telegram.ext import (
 )
 
 # Загружаем модель Whisper
-model = whisper.load_model("small")
+model = whisper.load_model("tiny")
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 

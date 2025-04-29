@@ -24,12 +24,10 @@ if not TOKEN:
 
 # Парсер временных спецификаций
 def parse_time_spec(t: str):
-    # относительное время: 10m, 2h
     m = re.match(r"^(\d+)([mh])$", t)
     if m:
         v, unit = int(m.group(1)), m.group(2)
         return timedelta(minutes=v) if unit == "m" else timedelta(hours=v)
-    # абсолютное время HH:MM
     now = datetime.now()
     try:
         hh, mm = map(int, t.split(':'))
@@ -40,7 +38,7 @@ def parse_time_spec(t: str):
     except Exception:
         return None
 
-# Обработчик транскрипции команды
+# Обработчик транскрипции
 async def cmd_transcribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
     reply = msg.reply_to_message
@@ -80,12 +78,10 @@ async def remind_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text(
             "Неверный формат времени. Используйте 10m, 2h или HH:MM"
         )
-    # вычисляем задержку
     if isinstance(when, timedelta):
         delay = when.total_seconds()
     else:
         delay = (when - datetime.now()).total_seconds()
-    # планируем задачу
     job = context.job_queue.run_once(
         alarm,
         when=delay,
@@ -100,7 +96,7 @@ async def remind_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Список напоминаний
 async def list_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    jobs = context.job_queue.get_jobs()
+    jobs = context.job_queue.jobs()
     if not jobs:
         return await update.message.reply_text("Нет запланированных напоминаний.")
     now = datetime.now()
@@ -116,7 +112,8 @@ async def cancel_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         return await update.message.reply_text("Используйте /cancel <ID напоминания>")
     job_id = context.args[0]
-    job = context.job_queue.get_job(job_id)
+    jobs = context.job_queue.jobs()
+    job = next((j for j in jobs if j.name == job_id), None)
     if job:
         job.schedule_removal()
         return await update.message.reply_text(f"❌ Напоминание {job_id} отменено.")
